@@ -183,22 +183,24 @@ class CourseOutlineTool(Tool):
             except (json.JSONDecodeError, TypeError):
                 lessons = []
             
-            # Format the response
+            # Format the response as markdown
             outline = [f"**Course:** {course_title}"]
             if instructor and instructor != 'Unknown':
                 outline.append(f"**Instructor:** {instructor}")
             if course_link:
                 outline.append(f"**Course Link:** {course_link}")
             
-            outline.append("\n**Lessons:**")
+            outline.append("")  # Empty line for spacing
+            outline.append("**Lessons:**")
+            outline.append("")  # Another empty line before the list
             
             if lessons:
                 for lesson in sorted(lessons, key=lambda x: x.get('lesson_number', 0)):
                     lesson_num = lesson.get('lesson_number', 'N/A')
                     lesson_title = lesson.get('lesson_title', 'Unknown')
-                    outline.append(f"• Lesson {lesson_num}: {lesson_title}")
+                    outline.append(f"- Lesson {lesson_num}: {lesson_title}")
             else:
-                outline.append("No lessons found")
+                outline.append("- No lessons found")
             
             return "\n".join(outline)
             
