@@ -23,6 +23,27 @@ uv sync
 uv run --python 3.11 <command>
 ```
 
+### Code Quality Tools
+```bash
+# Format code with black and isort
+./scripts/format.sh
+
+# Run linting checks (flake8, black, isort)
+./scripts/lint.sh
+
+# Run tests
+./scripts/test.sh
+
+# Run complete quality check suite (format + lint + test)
+./scripts/check-all.sh
+
+# Manual commands (if needed)
+uv run --python 3.11 black .
+uv run --python 3.11 isort .
+uv run --python 3.11 flake8 .
+uv run --python 3.11 pytest tests/ -v
+```
+
 ### Environment Setup
 - Create `.env` file with `ANTHROPIC_API_KEY=your_api_key_here`
 - Requires Python 3.11 or higher
