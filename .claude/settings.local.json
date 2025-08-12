@@ -1,9 +1,16 @@
 {
   "permissions": {
     "allow": [
+      "Bash(find:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
       "Bash(./run.sh)",
+      "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_take_screenshot",
-      "Bash(uv run:*)"
+      "Bash(mkdir:*)",
+      "Bash(python -m pytest --version)",
+      "Bash(uv run:*)",
+      "Bash(uv add:*)"
     ],
     "deny": []
   }
