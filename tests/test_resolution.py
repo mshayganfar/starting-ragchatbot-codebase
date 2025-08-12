@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 import sys
 import os
-sys.path.append('./backend')
+
+# Add parent directory and backend directory to path
+parent_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+backend_dir = os.path.join(parent_dir, 'backend')
+sys.path.insert(0, parent_dir)
+sys.path.insert(0, backend_dir)
 
 from backend.config import config
 from backend.vector_store import VectorStore

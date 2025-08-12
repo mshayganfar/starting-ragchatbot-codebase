@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(./run.sh)",
-      "mcp__playwright__browser_take_screenshot"
+      "mcp__playwright__browser_take_screenshot",
+      "Bash(uv run:*)"
     ],
     "deny": []
   }
