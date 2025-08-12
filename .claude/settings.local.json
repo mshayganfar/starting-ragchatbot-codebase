@@ -13,5 +13,18 @@
       "Bash(uv add:*)"
     ],
     "deny": []
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Read|Grep",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "say 'All done'"
+          }
+        ]
+      }
+    ]
   }
 }
