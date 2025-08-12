@@ -1,40 +1,45 @@
-import anthropic
-from typing import List, Optional, Dict, Any
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
+import anthropic
+
 
 @dataclass
 class ToolExecutionRound:
     """Tracks tool execution for a single round"""
+
     round_number: int
     tool_calls: List[Dict]
     tool_results: List[Dict]
     ai_response: Optional[str] = None
     error: Optional[str] = None
 
+
 class SequentialToolTracker:
     """Tracks state across multiple tool execution rounds"""
-    
+
     def __init__(self, max_rounds: int = 2):
         self.max_rounds = max_rounds
         self.rounds: List[ToolExecutionRound] = []
         self.current_round = 0
-        
+
     def can_continue(self) -> bool:
         """Check if we can continue to the next round"""
         return self.current_round < self.max_rounds
-        
+
     def add_round(self, round_data: ToolExecutionRound):
         """Add a completed round to the tracker"""
         self.rounds.append(round_data)
         self.current_round += 1
-        
+
     def get_total_tool_calls(self) -> int:
         """Get total number of tool calls across all rounds"""
         return sum(len(round.tool_calls) for round in self.rounds)
 
+
 class AIGenerator:
     """Handles interactions with Anthropic's Claude API for generating responses"""
-    
+
     # Static system prompt to avoid rebuilding on each call
     SYSTEM_PROMPT = """ You are an AI assistant specialized in course materials and educational content with access to comprehensive search tools for course information.
 
@@ -69,76 +74,83 @@ All responses must be:
 4. **Example-supported** - Include relevant examples when they aid understanding
 Provide only the direct answer to what was asked.
 """
-    
+
     def __init__(self, api_key: str, model: str):
         self.client = anthropic.Anthropic(api_key=api_key)
         self.model = model
-        
+
         # Pre-build base API parameters
-        self.base_params = {
-            "model": self.model,
-            "temperature": 0,
-            "max_tokens": 800
-        }
-    
-    def generate_response(self, query: str,
-                         conversation_history: Optional[str] = None,
-                         tools: Optional[List] = None,
-                         tool_manager=None,
-                         max_tool_rounds: int = 2) -> str:
+        self.base_params = {"model": self.model, "temperature": 0, "max_tokens": 800}
+
+    def generate_response(
+        self,
+        query: str,
+        conversation_history: Optional[str] = None,
+        tools: Optional[List] = None,
+        tool_manager=None,
+        max_tool_rounds: int = 2,
+    ) -> str:
         """
         Generate AI response with optional sequential tool usage and conversation context.
-        
+
         Args:
             query: The user's question or request
             conversation_history: Previous messages for context
             tools: Available tools the AI can use
             tool_manager: Manager to execute tools
             max_tool_rounds: Maximum number of sequential tool execution rounds (default: 2)
-            
+
         Returns:
             Generated response as string
         """
-        
+
         # Build system content efficiently - avoid string ops when possible
         system_content = (
             f"{self.SYSTEM_PROMPT}\n\nPrevious conversation:\n{conversation_history}"
-            if conversation_history 
+            if conversation_history
             else self.SYSTEM_PROMPT
         )
-        
+
         # Prepare API call parameters efficiently
         api_params = {
             **self.base_params,
             "messages": [{"role": "user", "content": query}],
-            "system": system_content
+            "system": system_content,
         }
-        
+
         # Add tools if available
         if tools:
             api_params["tools"] = tools
             api_params["tool_choice"] = {"type": "auto"}
-        
+
         # Get response from Claude
         response = self.client.messages.create(**api_params)
-        
+
         # Handle sequential tool execution if needed
         if response.stop_reason == "tool_use" and tool_manager:
-            return self._handle_tool_execution(response, api_params, tool_manager, max_tool_rounds)
-        
+            return self._handle_tool_execution(
+                response, api_params, tool_manager, max_tool_rounds
+            )
+
         # Return direct response
         return response.content[0].text
-    
-    def _handle_tool_execution(self, initial_response, base_params: Dict[str, Any], tool_manager, max_rounds: int = 2):
+
+    def _handle_tool_execution(
+        self,
+        initial_response,
+        base_params: Dict[str, Any],
+        tool_manager,
+        max_rounds: int = 2,
+    ):
         """
         Handle sequential execution of tool calls across multiple rounds.
-        
+
         Args:
             initial_response: The response containing tool use requests
             base_params: Base API parameters
             tool_manager: Manager to execute tools
             max_rounds: Maximum number of tool execution rounds
-            
+
         Returns:
             Final response text after tool execution
         """
@@ -146,23 +158,25 @@ Provide only the direct answer to what was asked.
         tracker = SequentialToolTracker(max_rounds)
         messages = base_params["messages"].copy()
         current_response = initial_response
-        
+
         # Process sequential tool rounds
         while tracker.can_continue() and current_response.stop_reason == "tool_use":
             try:
                 # Execute current round
                 round_result = self._execute_tool_round(
-                    current_response, 
-                    tool_manager, 
-                    tracker.current_round + 1
+                    current_response, tool_manager, tracker.current_round + 1
                 )
                 tracker.add_round(round_result)
-                
+
                 # Update messages with AI response and tool results
-                messages.append({"role": "assistant", "content": current_response.content})
+                messages.append(
+                    {"role": "assistant", "content": current_response.content}
+                )
                 if round_result.tool_results:
-                    messages.append({"role": "user", "content": round_result.tool_results})
-                
+                    messages.append(
+                        {"role": "user", "content": round_result.tool_results}
+                    )
+
                 # Check if we can continue to next round
                 if tracker.can_continue():
                     # Get next response with tools available
@@ -171,25 +185,25 @@ Provide only the direct answer to what was asked.
                         "messages": messages,
                         "system": base_params["system"],
                         "tools": base_params.get("tools", []),
-                        "tool_choice": {"type": "auto"}
+                        "tool_choice": {"type": "auto"},
                     }
                     current_response = self.client.messages.create(**next_params)
                 else:
                     # Max rounds reached, break and get final response
                     current_response = None
                     break
-                    
+
             except Exception as e:
                 # Handle tool execution errors
                 error_round = ToolExecutionRound(
                     round_number=tracker.current_round + 1,
                     tool_calls=[],
                     tool_results=[],
-                    error=str(e)
+                    error=str(e),
                 )
                 tracker.add_round(error_round)
                 break
-        
+
         # Get final response
         if current_response and current_response.stop_reason != "tool_use":
             # Claude provided a final response without tools
@@ -198,56 +212,63 @@ Provide only the direct answer to what was asked.
             # Need to get final response without tools
             final_response = self._get_final_response(messages, base_params)
             return final_response
-    
-    def _execute_tool_round(self, response, tool_manager, round_number: int) -> ToolExecutionRound:
+
+    def _execute_tool_round(
+        self, response, tool_manager, round_number: int
+    ) -> ToolExecutionRound:
         """Execute all tool calls in a single round."""
-        
+
         tool_calls = []
         tool_results = []
-        
+
         for content_block in response.content:
             if content_block.type == "tool_use":
-                tool_calls.append({
-                    "name": content_block.name,
-                    "input": content_block.input,
-                    "id": content_block.id
-                })
-                
+                tool_calls.append(
+                    {
+                        "name": content_block.name,
+                        "input": content_block.input,
+                        "id": content_block.id,
+                    }
+                )
+
                 try:
                     tool_result = tool_manager.execute_tool(
-                        content_block.name, 
-                        **content_block.input
+                        content_block.name, **content_block.input
                     )
-                    
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": content_block.id,
-                        "content": tool_result
-                    })
-                    
+
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": content_block.id,
+                            "content": tool_result,
+                        }
+                    )
+
                 except Exception as e:
-                    tool_results.append({
-                        "type": "tool_result",
-                        "tool_use_id": content_block.id,
-                        "content": f"Tool execution error: {str(e)}",
-                        "is_error": True
-                    })
-        
+                    tool_results.append(
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": content_block.id,
+                            "content": f"Tool execution error: {str(e)}",
+                            "is_error": True,
+                        }
+                    )
+
         return ToolExecutionRound(
-            round_number=round_number,
-            tool_calls=tool_calls,
-            tool_results=tool_results
+            round_number=round_number, tool_calls=tool_calls, tool_results=tool_results
         )
-    
-    def _get_final_response(self, messages: List[Dict], base_params: Dict[str, Any]) -> str:
+
+    def _get_final_response(
+        self, messages: List[Dict], base_params: Dict[str, Any]
+    ) -> str:
         """Get final response without tools."""
-        
+
         final_params = {
             **self.base_params,
             "messages": messages,
-            "system": base_params["system"]
+            "system": base_params["system"],
             # Note: no tools parameter for final call
         }
-        
+
         final_response = self.client.messages.create(**final_params)
         return final_response.content[0].text
